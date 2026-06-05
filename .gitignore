@@ -1,0 +1,14 @@
+node_modules/
+.DS_Store
+.wrangler/
+.svelte-kit/
+.next/
+dist/
+build/
+.env
+.env.*
+!.env.example
+coverage/
+tmp/
+outputs/
+data/raw/

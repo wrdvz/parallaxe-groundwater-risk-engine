@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Parallaxe Groundwater Risk Engine</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="./styles.css?v=2026-06-05-portfolio-live-1" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Moteur de risque eaux souterraines</p>
+          <h1>Rechercher des entreprises et analyser leur exposition groundwater en direct</h1>
+          <p class="subcopy">
+            Recherche entreprise-first sur l’univers France actif. Ajoute des sites ICPE au portefeuille, vois le
+            signal se recalculer instantanément, puis inspecte les sites les plus critiques.
+          </p>
+        </div>
+        <div class="topbar-meta">
+          <span class="status-pill" id="api-status">Vérification API</span>
+          <a
+            class="meta-link"
+            href="https://parallaxe-groundwater-risk-engine-api.edward-vizard.workers.dev/health"
+            target="_blank"
+            rel="noreferrer"
+            >Santé de l’API</a
+          >
+        </div>
+      </header>
+
+      <main class="stack-layout">
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="panel-kicker">1. Recherche</p>
+              <h2>Trouver des entreprises</h2>
+            </div>
+          </div>
+
+          <div class="split-panel split-panel-search">
+            <div class="split-left panel-column">
+              <div class="stack-card search-stack-card">
+                <div class="mode-tabs" role="tablist" aria-label="Mode d’entrée portefeuille">
+                  <button class="mode-tab is-active" id="tab-search" type="button" data-mode-tab="search">Recherche</button>
+                  <button class="mode-tab" id="tab-import" type="button" data-mode-tab="import">Import portefeuille</button>
+                </div>
+
+                <div id="search-mode-pane" class="mode-pane is-active">
+                  <form id="search-form" class="search-form">
+                    <label class="search-label" for="search-input">Rechercher une entreprise, un SIREN ou un SIRET</label>
+                    <div class="search-row">
+                      <input
+                        id="search-input"
+                        name="q"
+                        type="search"
+                        placeholder="Saint Gobain, 312379076, 31237907600036..."
+                        autocomplete="off"
+                      />
+                      <button type="submit">Rechercher</button>
+                    </div>
+                    <p class="search-helper">
+                      La recherche en direct démarre à partir de 2 caractères. Continue à taper pour affiner.
+                    </p>
+                    <label class="search-filter">
+                      <input id="eligible-only" type="checkbox" />
+                      <span>Entreprises éligibles au scoring seulement</span>
+                    </label>
+                  </form>
+
+                  <div class="hint-row">
+                    <button class="ghost-button" data-example="Saint Gobain">Essayer « Saint Gobain »</button>
+                    <button class="ghost-button" data-example="312379076">Essayer un SIREN</button>
+                    <button class="ghost-button" data-example="31237907600036">Essayer un SIRET</button>
+                  </div>
+                </div>
+
+                <div id="import-mode-pane" class="mode-pane">
+                  <div class="import-type-toggle" role="radiogroup" aria-label="Type d’identifiant à importer">
+                    <button class="toggle-chip is-active" type="button" data-import-type="siret">SIRET</button>
+                    <button class="toggle-chip" type="button" data-import-type="siren">SIREN</button>
+                  </div>
+                  <p class="search-helper">
+                    Colle une liste d’identifiants ou importe un fichier texte/CSV. Le portefeuille sera enrichi et analysé automatiquement.
+                  </p>
+                  <textarea
+                    id="import-input"
+                    class="import-textarea"
+                    placeholder="Un identifiant par ligne&#10;31237907600036&#10;55210055400013"
+                  ></textarea>
+                  <div class="import-actions">
+                    <label class="ghost-button file-button" for="import-file-input">Importer un fichier</label>
+                    <input id="import-file-input" type="file" accept=".txt,.csv,.tsv" hidden />
+                    <button id="import-run" type="button">Ajouter au portefeuille</button>
+                  </div>
+                  <div id="import-meta" class="import-meta">Aucun import lancé pour le moment.</div>
+                </div>
+              </div>
+
+              <div id="coverage-box" class="coverage-box panel-column-fill">
+                <div class="coverage-grid">
+                  <div class="coverage-item">
+                    <div class="coverage-label">Entreprises France actives (SIREN)</div>
+                    <div class="coverage-value" id="coverage-reference-siren">—</div>
+                    <div class="coverage-subvalue" id="coverage-searchable-siren">— recherchables aujourd’hui</div>
+                  </div>
+                  <div class="coverage-item">
+                    <div class="coverage-label">Sites ICPE en France</div>
+                    <div class="coverage-value" id="coverage-icpe-sites">—</div>
+                    <div class="coverage-subvalue">Intégrés au pipeline actuel</div>
+                  </div>
+                  <div class="coverage-item">
+                    <div class="coverage-label">Sites ICPE éligibles au scoring</div>
+                    <div class="coverage-value" id="coverage-icpe-sites-scorable">—</div>
+                    <div class="coverage-subvalue">Retenus pour l’analyse groundwater</div>
+                  </div>
+                </div>
+                <p class="coverage-note" id="coverage-note">
+                  Les références de couverture apparaîtront dès que l’API sera joignable.
+                </p>
+              </div>
+            </div>
+
+            <div class="split-right">
+              <div class="scroll-pane result-pane">
+                <div class="result-meta" id="search-meta">Pas encore de recherche.</div>
+                <div id="search-results" class="result-list empty-state">
+                  Les résultats de recherche apparaîtront ici.
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="panel-kicker">2. Portefeuille analysé</p>
+              <h2>Composer et évaluer le portefeuille</h2>
+            </div>
+            <button class="ghost-button" id="clear-selection" type="button">Vider le portefeuille</button>
+          </div>
+
+          <div class="split-panel split-panel-portfolio">
+            <div class="split-left panel-column">
+              <div class="stack-card summary-shell">
+                <div id="summary-grid" class="summary-grid empty-state">
+                  Ajoute une première entreprise pour voir le signal portefeuille se construire.
+                </div>
+              </div>
+              <div class="portfolio-map-card panel-column-fill">
+                <div class="portfolio-map-header">
+                  <div>
+                    <div class="section-eyebrow">Carte portefeuille</div>
+                    <p class="section-copy">Sites ICPE actuellement retenus dans l’analyse, colorés par criticité.</p>
+                  </div>
+                </div>
+                <div class="portfolio-map-shell">
+                  <div id="portfolio-map"></div>
+                  <div id="portfolio-map-empty" class="map-empty-state">
+                    Ajoute des sites au portefeuille pour les visualiser sur la carte.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="split-right">
+              <div id="selection-list" class="scroll-pane portfolio-pane selection-list empty-state">
+                Ajoute des sites depuis les résultats de recherche pour construire le portefeuille en direct.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <aside class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="panel-kicker">3. Détail du site</p>
+              <h2>Inspecter un actif</h2>
+            </div>
+          </div>
+          <div id="site-detail" class="detail-card empty-state">
+            Sélectionne un site depuis la recherche, la carte ou le portefeuille pour consulter sa fiche.
+          </div>
+        </aside>
+      </main>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script type="module" src="./app.js?v=2026-06-05-portfolio-live-1"></script>
+  </body>
+</html>

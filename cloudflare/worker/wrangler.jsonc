@@ -1,0 +1,88 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "parallaxe-groundwater-risk-engine-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-05-15",
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "parallaxe-groundwater-risk-engine",
+      "database_id": "d0a34db9-240d-4590-93ca-42e172e406c9"
+    }
+  ],
+  "vars": {
+    "APP_NAME": "parallaxe-groundwater-risk-engine",
+    "APP_STAGE": "mvp"
+  },
+  "env": {
+    "sample": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "parallaxe-groundwater-risk-engine-sample",
+          "database_id": "928a1953-08ff-412b-ba30-69b819f1ceec"
+        }
+      ],
+      "vars": {
+        "APP_NAME": "parallaxe-groundwater-risk-engine",
+        "APP_STAGE": "sample"
+      }
+    },
+    "sample_sharded": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "parallaxe-groundwater-risk-engine-sample",
+          "database_id": "928a1953-08ff-412b-ba30-69b819f1ceec"
+        },
+        {
+          "binding": "SEARCH_DB_0",
+          "database_name": "parallaxe-groundwater-risk-engine-search-sample-0",
+          "database_id": "78b800cc-2072-4aeb-a564-25e68444e119"
+        },
+        {
+          "binding": "SEARCH_DB_1",
+          "database_name": "parallaxe-groundwater-risk-engine-search-sample-1",
+          "database_id": "a7a5c2c5-0131-465c-ad8c-5710ba1a909f"
+        },
+        {
+          "binding": "SEARCH_DB_2",
+          "database_name": "parallaxe-groundwater-risk-engine-search-sample-2",
+          "database_id": "416c8848-27ec-4ace-b565-3df660750c97"
+        },
+        {
+          "binding": "SEARCH_DB_3",
+          "database_name": "parallaxe-groundwater-risk-engine-search-sample-3",
+          "database_id": "bd7cf3dc-8640-478b-802f-d5bc24591fd5"
+        },
+        {
+          "binding": "SEARCH_DB_4",
+          "database_name": "parallaxe-groundwater-risk-engine-search-sample-4",
+          "database_id": "2c535a86-565c-4c05-81b5-bb631813404d"
+        },
+        {
+          "binding": "SEARCH_DB_5",
+          "database_name": "parallaxe-groundwater-risk-engine-search-sample-5",
+          "database_id": "f9769b66-0efb-4141-9a6e-c2643d11911c"
+        },
+        {
+          "binding": "SEARCH_DB_6",
+          "database_name": "parallaxe-groundwater-risk-engine-search-sample-6",
+          "database_id": "0092c01f-af9b-409a-ac36-24740f203ca8"
+        },
+        {
+          "binding": "SEARCH_DB_7",
+          "database_name": "parallaxe-groundwater-risk-engine-search-sample-7",
+          "database_id": "b4c0b22f-eb7d-4db5-9d8c-037456907510"
+        }
+      ],
+      "vars": {
+        "APP_NAME": "parallaxe-groundwater-risk-engine",
+        "APP_STAGE": "sample_sharded"
+      }
+    }
+  }
+}
