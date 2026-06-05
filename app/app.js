@@ -5,11 +5,11 @@ const SAMPLE_SHARDED_API_BASE =
 
 const API_MODE = new URLSearchParams(window.location.search).get("api");
 const API_BASE =
-  API_MODE === "sample_sharded"
-    ? SAMPLE_SHARDED_API_BASE
+  API_MODE === "prod"
+    ? PROD_API_BASE
     : API_MODE === "sample"
       ? SAMPLE_API_BASE
-      : PROD_API_BASE;
+      : SAMPLE_SHARDED_API_BASE;
 
 const PRIORITY_ORDER = {
   Critical: 0,
