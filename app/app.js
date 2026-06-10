@@ -20,6 +20,22 @@ const PRIORITY_ORDER = {
   Unknown: 4,
 };
 
+const GRID_COLORS = {
+  high_pressure_declining_groundwater: "#9b2c2c",
+  low_pressure_declining_groundwater: "#e49a9a",
+  high_pressure_non_declining_groundwater: "#355f7c",
+  low_pressure_non_declining_groundwater: "#b9d2df",
+  unclassified_no_groundwater_data: "#e5e7eb",
+};
+
+const GRID_LABELS = {
+  high_pressure_declining_groundwater: "Forte pression + nappe en baisse",
+  low_pressure_declining_groundwater: "Faible pression + nappe en baisse",
+  high_pressure_non_declining_groundwater: "Forte pression + nappe non baissière",
+  low_pressure_non_declining_groundwater: "Faible pression + nappe non baissière",
+  unclassified_no_groundwater_data: "Non classé (pas de donnée nappe)",
+};
+
 const state = {
   searchResults: [],
   selectedSites: new Map(),
@@ -66,6 +82,8 @@ let searchDebounce = null;
 let map = null;
 let portfolioLayer = null;
 let lastMapCount = 0;
+let gridLayer = null;
+let gridLoadPromise = null;
 
 function setInputMode(mode) {
   state.inputMode = mode;
@@ -279,6 +297,29 @@ function priorityMarkerColor(level) {
   }[level] ?? "#315d95";
 }
 
+function styleGridFeature(feature) {
+  const gridClass = feature?.properties?.exposure_class_2x2;
+  return {
+    color: "transparent",
+    weight: 0,
+    fillColor: GRID_COLORS[gridClass] || "#cccccc",
+    fillOpacity: gridClass === "unclassified_no_groundwater_data" ? 0.22 : 0.52,
+  };
+}
+
+function buildGridPopup(feature) {
+  const props = feature?.properties || {};
+  const label = GRID_LABELS[props.exposure_class_2x2] || props.exposure_class_2x2 || "Maille";
+  const volume =
+    props.withdrawal_volume_m3 ?? props.withdrawal_pressure_volume_m3 ?? props.aep_ind_irr_volume_m3 ?? null;
+  const stations = props.station_count ?? null;
+  return `
+    <strong>${escapeHtml(label)}</strong><br>
+    Volume de prélèvement : ${escapeHtml(formatInteger(volume))} m3<br>
+    Stations nappes : ${escapeHtml(formatInteger(stations))}
+  `;
+}
+
 function createMapPopup(site) {
   return `
     <strong>${escapeHtml(site.site_name || "Site")}</strong><br>
@@ -346,7 +387,38 @@ function ensureMap() {
     maxZoom: 20,
   }).addTo(map);
 
+  const gridPane = map.createPane("pane-grid");
+  gridPane.style.zIndex = 350;
+
+  const portfolioPane = map.createPane("pane-portfolio");
+  portfolioPane.style.zIndex = 620;
+
   portfolioLayer = window.L.featureGroup().addTo(map);
+  void ensureGridLayer();
+}
+
+async function ensureGridLayer() {
+  if (!map || gridLayer) return;
+  if (!gridLoadPromise) {
+    gridLoadPromise = fetch("./data/icpe_exposure_grid_20km_wgs84_min.geojson")
+      .then((response) => {
+        if (!response.ok) throw new Error(`Impossible de charger la grille (${response.status})`);
+        return response.json();
+      })
+      .then((geojson) => {
+        gridLayer = window.L.geoJSON(geojson, {
+          pane: "pane-grid",
+          style: styleGridFeature,
+          onEachFeature: (feature, layer) => {
+            layer.bindPopup(buildGridPopup(feature));
+          },
+        }).addTo(map);
+      })
+      .catch((error) => {
+        console.warn("Groundwater grid unavailable", error);
+      });
+  }
+  await gridLoadPromise;
 }
 
 function renderPortfolioMap() {
@@ -362,6 +434,7 @@ function renderPortfolioMap() {
   for (const site of withCoords) {
     const [lat, lon] = extractLatLng(site);
     const marker = window.L.circleMarker([lat, lon], {
+      pane: "pane-portfolio",
       radius: 7,
       stroke: true,
       weight: 1.5,

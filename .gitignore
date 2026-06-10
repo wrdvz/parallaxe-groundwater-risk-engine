@@ -12,3 +12,5 @@ coverage/
 tmp/
 outputs/
 data/raw/
+app/data/icpe_exposure_grid_20km.geojson
+app/data/icpe_exposure_grid_20km_wgs84.geojson
