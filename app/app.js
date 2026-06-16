@@ -20,6 +20,15 @@ const PRIORITY_ORDER = {
   Unknown: 4,
 };
 
+const SITE_RISK_COLORS = {
+  Critical: "#FF4D00",
+  High: "#FF4D00",
+  Elevated: "#FC7C51",
+  Moderate: "#FFC39E",
+  Low: "#FFE7D8",
+  Unknown: "#D9E1EF",
+};
+
 const GRID_COLORS = {
   high_pressure_declining_groundwater: "#9b2c2c",
   low_pressure_declining_groundwater: "#e49a9a",
@@ -288,13 +297,7 @@ function extractLatLng(site) {
 }
 
 function priorityMarkerColor(level) {
-  return {
-    Critical: "#ad2e24",
-    High: "#c46f11",
-    Elevated: "#c46f11",
-    Moderate: "#557321",
-    Low: "#315d95",
-  }[level] ?? "#315d95";
+  return SITE_RISK_COLORS[level] ?? SITE_RISK_COLORS.Unknown;
 }
 
 function styleGridFeature(feature) {

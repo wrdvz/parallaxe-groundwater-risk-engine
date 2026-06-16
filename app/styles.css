@@ -10,10 +10,10 @@
   --text-muted: #5e6c84;
   --accent: #234bdb;
   --accent-soft: #e9efff;
-  --critical: #ad2e24;
-  --high: #c46f11;
-  --moderate: #4f6b13;
-  --low: #385f8c;
+  --critical: #ff4d00;
+  --high: #fc7c51;
+  --moderate: #ffc39e;
+  --low: #ffe7d8;
   --shadow: 0 16px 40px rgba(28, 44, 74, 0.08);
   --radius: 8px;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -554,6 +554,52 @@ button:disabled {
   padding: 14px 14px 0;
 }
 
+.legend-band {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 14px 0;
+}
+
+.legend-card {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(21, 35, 59, 0.1);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.legend-title {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.legend-list {
+  display: grid;
+  gap: 6px;
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.legend-swatch {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
 .portfolio-map-shell {
   position: relative;
   margin: 14px;
@@ -584,61 +630,36 @@ button:disabled {
   z-index: 500;
 }
 
-.map-legend {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 550;
-  display: grid;
-  gap: 6px;
-  min-width: 246px;
-  padding: 10px 12px;
-  border: 1px solid rgba(21, 35, 59, 0.1);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 10px 24px rgba(19, 35, 63, 0.08);
-  backdrop-filter: blur(6px);
-}
-
-.map-legend-title {
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.map-legend-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.map-legend-swatch {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-  border-radius: 3px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-.swatch-critical {
+.swatch-grid-critical {
   background: #9b2c2c;
 }
 
-.swatch-high {
+.swatch-grid-high {
   background: #e49a9a;
 }
 
-.swatch-low {
+.swatch-grid-low {
   background: #355f7c;
 }
 
-.swatch-soft {
+.swatch-grid-soft {
   background: #b9d2df;
+}
+
+.swatch-site-critical {
+  background: var(--critical);
+}
+
+.swatch-site-high {
+  background: var(--high);
+}
+
+.swatch-site-moderate {
+  background: var(--moderate);
+}
+
+.swatch-site-low {
+  background: var(--low);
 }
 
 .portfolio-pane-head {
@@ -747,16 +768,18 @@ button:disabled {
 }
 
 .priority-pill {
-  color: #fff;
   border: 0;
+  color: var(--text);
 }
 
 .priority-critical {
   background: var(--critical);
+  color: #fff;
 }
 
 .priority-high {
   background: var(--high);
+  color: #fff;
 }
 
 .priority-moderate {
@@ -865,9 +888,8 @@ button:disabled {
     flex: none;
   }
 
-  .map-legend {
-    min-width: 0;
-    max-width: calc(100% - 24px);
+  .legend-band {
+    grid-template-columns: 1fr;
   }
 }
 
