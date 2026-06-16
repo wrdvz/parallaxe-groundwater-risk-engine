@@ -175,6 +175,10 @@ h1 {
   min-height: 560px;
 }
 
+.split-panel-portfolio .split-right {
+  display: flex;
+}
+
 .search-form {
   display: flex;
   flex-direction: column;
@@ -428,6 +432,11 @@ button:disabled {
   height: 560px;
 }
 
+.split-panel-portfolio .portfolio-pane {
+  height: 100%;
+  flex: 1;
+}
+
 .result-pane {
   display: flex;
   flex-direction: column;
@@ -604,6 +613,8 @@ button:disabled {
   position: relative;
   margin: 14px;
   flex: 1;
+  min-height: 560px;
+  aspect-ratio: 1.12 / 1;
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
@@ -885,7 +896,9 @@ button:disabled {
 
   .portfolio-map-shell {
     height: 360px;
+    min-height: 360px;
     flex: none;
+    aspect-ratio: auto;
   }
 
   .legend-band {
