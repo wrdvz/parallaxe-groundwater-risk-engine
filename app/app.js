@@ -526,7 +526,7 @@ function renderSearchResults() {
     els.searchResults.className = "result-list empty-state";
     els.searchResults.textContent = showSites
       ? "Aucun établissement correspondant trouvé."
-      : "Aucune entreprise correspondante pour l’instant — essaie d’ajouter une ville, un SIREN ou un SIRET.";
+      : "Aucune entreprise correspondante pour l’instant — essayez d’ajouter une ville, un SIREN ou un SIRET.";
     return;
   }
 
@@ -585,7 +585,7 @@ function renderSummary() {
   const summary = state.latestAnalysis?.summary;
   if (!summary && !state.isAnalyzing) {
     els.summaryGrid.className = "summary-grid empty-state";
-    els.summaryGrid.textContent = "Ajoute une première entreprise pour voir le signal portefeuille se construire.";
+    els.summaryGrid.textContent = "Ajoutez une première entreprise pour voir le signal portefeuille se construire.";
     return;
   }
 
@@ -623,7 +623,7 @@ function renderPortfolioList() {
   const sites = getAnalyzedSites();
   if (!sites.length) {
     els.selectionList.className = "scroll-pane portfolio-pane selection-list empty-state";
-    els.selectionList.textContent = "Ajoute des sites depuis les résultats de recherche pour construire le portefeuille en direct.";
+    els.selectionList.textContent = "Ajoutez des sites depuis les résultats de recherche pour construire le portefeuille en direct.";
     return;
   }
 
@@ -692,7 +692,7 @@ function renderPortfolioList() {
 function renderDetail(site) {
   if (!site) {
     els.siteDetail.className = "detail-card empty-state";
-    els.siteDetail.textContent = "Sélectionne un site depuis la recherche, la carte ou le portefeuille pour consulter sa fiche.";
+    els.siteDetail.textContent = "Sélectionnez un site depuis la recherche, la carte ou le portefeuille pour consulter sa fiche.";
     return;
   }
 
@@ -809,13 +809,13 @@ async function runSearch(query, { silent = false } = {}) {
       if (precise && (counts.site_matches ?? 0) > 0) {
         els.searchMeta.textContent = `${formatInteger(counts.site_matches ?? 0)} établissement${(counts.site_matches ?? 0) > 1 ? "s" : ""} correspondant${(counts.site_matches ?? 0) > 1 ? "s" : ""} pour « ${query} ».`;
       } else if ((counts.company_matches ?? 0) === 0 && (counts.site_matches ?? 0) > 0) {
-        els.searchMeta.textContent = `${formatInteger(counts.site_matches ?? 0)} établissements correspondants pour « ${query} ». Ajoute un nom d’entreprise, une ville, un SIREN ou un SIRET si besoin.`;
+        els.searchMeta.textContent = `${formatInteger(counts.site_matches ?? 0)} établissements correspondants pour « ${query} ». Ajoutez un nom d’entreprise, une ville, un SIREN ou un SIRET si besoin.`;
       } else if ((counts.company_matches ?? 0) > 50) {
-        els.searchMeta.textContent = `${formatInteger(counts.company_matches ?? 0)} résultat${(counts.company_matches ?? 0) > 1 ? "s" : ""} ${eligibleOnly ? "d’entreprise éligible" : "d’entreprise"} pour « ${query} ». Ajoute des caractères, une ville, un SIREN ou un SIRET pour affiner la recherche. Affichage de ${formatInteger(counts.displayed_companies ?? 0)}.`.replace("  ", " ");
+        els.searchMeta.textContent = `${formatInteger(counts.company_matches ?? 0)} résultat${(counts.company_matches ?? 0) > 1 ? "s" : ""} ${eligibleOnly ? "d’entreprise éligible" : "d’entreprise"} pour « ${query} ». Ajoutez des caractères, une ville, un SIREN ou un SIRET pour affiner la recherche. Affichage de ${formatInteger(counts.displayed_companies ?? 0)}.`.replace("  ", " ");
       } else if ((counts.company_matches ?? 0) > 0) {
         els.searchMeta.textContent = `${formatInteger(counts.company_matches ?? 0)} entreprise${(counts.company_matches ?? 0) > 1 ? "s" : ""} ${eligibleOnly ? "éligible " : ""}trouvée${(counts.company_matches ?? 0) > 1 ? "s" : ""} pour « ${query} ».`;
       } else {
-        els.searchMeta.textContent = `Aucun résultat ${eligibleOnly ? "d’entreprise éligible" : "entreprise"} pour « ${query} ». Essaie un nom plus précis, une ville, un SIREN ou un SIRET.`;
+        els.searchMeta.textContent = `Aucun résultat ${eligibleOnly ? "d’entreprise éligible" : "entreprise"} pour « ${query} ». Essayez un nom plus précis, une ville, un SIREN ou un SIRET.`;
       }
     }
 
