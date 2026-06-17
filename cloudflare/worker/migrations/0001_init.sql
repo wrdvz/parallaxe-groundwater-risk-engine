@@ -66,11 +66,11 @@ CREATE TABLE IF NOT EXISTS site_risk_scores (
   risk_explanation_short TEXT NOT NULL,
   score_version TEXT NOT NULL,
   dependency_score_1_10 REAL,
+  is_water_relevant INTEGER NOT NULL DEFAULT 0,
+  within_water_scope INTEGER NOT NULL DEFAULT 0,
   groundwater_score_10 REAL,
   withdrawal_score_10 REAL,
-  criticality_score_10 REAL,
-  is_water_relevant INTEGER NOT NULL DEFAULT 0,
-  within_water_scope INTEGER NOT NULL DEFAULT 0
+  criticality_score_10 REAL
 );
 
 CREATE INDEX IF NOT EXISTS idx_companies_normalized_name ON companies(normalized_name);
