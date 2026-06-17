@@ -10,3 +10,9 @@ Precomputed screening output consumed by the app runtime.
 - `confidence_label`
 - `risk_explanation_short`
 - `score_version`
+- `dependency_score_1_10`
+- `groundwater_score_10`
+- `withdrawal_score_10`
+- `criticality_score_10`
+- `is_water_relevant`
+- `within_water_scope`

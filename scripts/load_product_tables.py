@@ -11,7 +11,7 @@ import pyarrow.parquet as pq
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_UPSTREAM = (
-    PROJECT_ROOT.parent / "icpe-groundwater-exposure" / "outputs" / "product"
+    PROJECT_ROOT.parent / "parallaxe-icpe-groundwater-exposure" / "outputs" / "product"
 )
 DEFAULT_SIRENE_UNIT_LEGAL = (
     PROJECT_ROOT / "data" / "raw" / "sirene" / "StockUniteLegale_utf8.parquet"

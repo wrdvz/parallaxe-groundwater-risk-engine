@@ -14,3 +14,8 @@ Hydrological context already computed upstream at site level.
 - `aquifer_signal_marker`
 - `grid_class`
 - `pressure_level`
+- `withdrawal_pressure_volume_m3`
+- `groundwater_decline_percentile`
+- `withdrawal_volume_percentile`
+- `groundwater_decline_decile`
+- `withdrawal_volume_decile`

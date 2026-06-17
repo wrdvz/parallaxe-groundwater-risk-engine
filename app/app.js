@@ -47,14 +47,18 @@ const GRID_LABELS = {
 
 const state = {
   searchResults: [],
+  exploreData: null,
   selectedSites: new Map(),
   latestAnalysis: null,
   coverage: null,
   currentQuery: "",
+  explorePriority: "",
+  exploreQuery: "",
   eligibleOnly: false,
   isAnalyzing: false,
+  isExploring: false,
   expandedCompanies: new Set(),
-  inputMode: "search",
+  inputMode: "explore",
   importType: "siret",
 };
 
@@ -63,10 +67,15 @@ const els = {
   apiHealthLink: document.querySelector(".meta-link"),
   searchForm: document.querySelector("#search-form"),
   searchInput: document.querySelector("#search-input"),
+  exploreInput: document.querySelector("#explore-input"),
+  exploreReset: document.querySelector("#explore-reset"),
+  exploreAlert: document.querySelector("#explore-alert"),
   searchMeta: document.querySelector("#search-meta"),
   searchResults: document.querySelector("#search-results"),
   eligibleOnly: document.querySelector("#eligible-only"),
   modeTabs: Array.from(document.querySelectorAll("[data-mode-tab]")),
+  priorityButtons: Array.from(document.querySelectorAll("[data-priority-filter]")),
+  exploreModePane: document.querySelector("#explore-mode-pane"),
   searchModePane: document.querySelector("#search-mode-pane"),
   importModePane: document.querySelector("#import-mode-pane"),
   importTypeButtons: Array.from(document.querySelectorAll("[data-import-type]")),
@@ -83,6 +92,7 @@ const els = {
   clearSelection: document.querySelector("#clear-selection"),
   summaryGrid: document.querySelector("#summary-grid"),
   siteDetail: document.querySelector("#site-detail"),
+  topSitesList: document.querySelector("#top-sites-list"),
   exampleButtons: Array.from(document.querySelectorAll("[data-example]")),
   mapEmpty: document.querySelector("#portfolio-map-empty"),
 };
@@ -93,14 +103,25 @@ let portfolioLayer = null;
 let lastMapCount = 0;
 let gridLayer = null;
 let gridLoadPromise = null;
+let gridFeatures = [];
+const siteGridMetricsCache = new Map();
+
+function syncPortfolioPaneHeight() {
+  const left = document.querySelector(".split-panel-portfolio .split-left");
+  const pane = document.querySelector(".split-panel-portfolio .portfolio-pane");
+  if (!left || !pane) return;
+  pane.style.height = `${left.getBoundingClientRect().height}px`;
+}
 
 function setInputMode(mode) {
   state.inputMode = mode;
   for (const button of els.modeTabs) {
     button.classList.toggle("is-active", button.dataset.modeTab === mode);
   }
+  els.exploreModePane.classList.toggle("is-active", mode === "explore");
   els.searchModePane.classList.toggle("is-active", mode === "search");
   els.importModePane.classList.toggle("is-active", mode === "import");
+  renderPrimaryPane();
 }
 
 function setImportType(type) {
@@ -230,6 +251,35 @@ function humanTrendLevel(value) {
   }[value] ?? (value || "n.d.");
 }
 
+function formatTrendDelta(value) {
+  if (value === null || value === undefined || value === "") return "n.d.";
+  const numeric = Number(value);
+  if (Number.isNaN(numeric)) return "n.d.";
+  const rounded = Math.round(numeric);
+  return `${rounded > 0 ? "+" : ""}${rounded} cm / 20 ans`;
+}
+
+function getWithdrawalVolumeValue(site) {
+  const raw =
+    site.withdrawal_pressure_volume_m3 ??
+    site.aep_ind_irr_volume_m3 ??
+    site.withdrawal_volume_m3 ??
+    getGridMetricsForSite(site)?.withdrawal_pressure_volume_m3 ??
+    null;
+  if (raw === null || raw === undefined || raw === "") return null;
+  const numeric = Number(raw);
+  return Number.isNaN(numeric) ? null : numeric;
+}
+
+function formatWithdrawalVolume(site) {
+  const numeric = getWithdrawalVolumeValue(site);
+  if (numeric === null) return null;
+  if (numeric >= 1_000_000) {
+    return `${(numeric / 1_000_000).toFixed(1)} Mm3/an`;
+  }
+  return `${formatInteger(numeric)} m3/an`;
+}
+
 function methodologyNote(site) {
   const parts = [];
   if (site.dependency_score_1_10 !== null && site.dependency_score_1_10 !== undefined) {
@@ -287,6 +337,25 @@ function sortSitesByPriority(a, b) {
   return String(a.site_name || "").localeCompare(String(b.site_name || ""), "fr", { sensitivity: "base" });
 }
 
+function compareSitesByExposure(a, b) {
+  const priorityDelta = (PRIORITY_ORDER[a.priority_level] ?? 99) - (PRIORITY_ORDER[b.priority_level] ?? 99);
+  if (priorityDelta !== 0) return priorityDelta;
+
+  const volumeA = getWithdrawalVolumeValue(a);
+  const volumeB = getWithdrawalVolumeValue(b);
+  if (volumeA !== null && volumeB !== null && volumeA !== volumeB) return volumeB - volumeA;
+  if ((volumeA !== null) !== (volumeB !== null)) return volumeA !== null ? -1 : 1;
+
+  const trendA = Number(a.aquifer_trend_value_cm_20y);
+  const trendB = Number(b.aquifer_trend_value_cm_20y);
+  const hasTrendA = Number.isFinite(trendA);
+  const hasTrendB = Number.isFinite(trendB);
+  if (hasTrendA && hasTrendB && trendA !== trendB) return trendA - trendB;
+  if (hasTrendA !== hasTrendB) return hasTrendA ? -1 : 1;
+
+  return String(a.site_name || "").localeCompare(String(b.site_name || ""), "fr", { sensitivity: "base" });
+}
+
 function extractLatLng(site) {
   const latCandidates = [site.latitude, site.lat, site.latitude_wgs84];
   const lonCandidates = [site.longitude, site.lon, site.longitude_wgs84];
@@ -298,6 +367,60 @@ function extractLatLng(site) {
 
 function priorityMarkerColor(level) {
   return SITE_RISK_COLORS[level] ?? SITE_RISK_COLORS.Unknown;
+}
+
+function computeFeatureBBox(feature) {
+  const ring = feature?.geometry?.coordinates?.[0] ?? [];
+  let minLon = Infinity;
+  let maxLon = -Infinity;
+  let minLat = Infinity;
+  let maxLat = -Infinity;
+  for (const point of ring) {
+    const [lon, lat] = point;
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+    if (lon < minLon) minLon = lon;
+    if (lon > maxLon) maxLon = lon;
+    if (lat < minLat) minLat = lat;
+    if (lat > maxLat) maxLat = lat;
+  }
+  return { minLon, maxLon, minLat, maxLat };
+}
+
+function pointInRing(lon, lat, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0];
+    const yi = ring[i][1];
+    const xj = ring[j][0];
+    const yj = ring[j][1];
+    const intersects = yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / ((yj - yi) || Number.EPSILON) + xi;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function getGridMetricsForSite(site) {
+  if (!site?.site_id) return null;
+  if (siteGridMetricsCache.has(site.site_id)) return siteGridMetricsCache.get(site.site_id);
+  const coords = extractLatLng(site);
+  if (!coords || !gridFeatures.length) return null;
+  const [lat, lon] = coords;
+  for (const feature of gridFeatures) {
+    const bbox = feature.__bbox;
+    if (!bbox) continue;
+    if (lon < bbox.minLon || lon > bbox.maxLon || lat < bbox.minLat || lat > bbox.maxLat) continue;
+    const ring = feature?.geometry?.coordinates?.[0] ?? [];
+    if (!ring.length) continue;
+    if (pointInRing(lon, lat, ring)) {
+      const metrics = {
+        withdrawal_pressure_volume_m3: feature?.properties?.withdrawal_pressure_volume_m3 ?? null,
+      };
+      siteGridMetricsCache.set(site.site_id, metrics);
+      return metrics;
+    }
+  }
+  siteGridMetricsCache.set(site.site_id, null);
+  return null;
 }
 
 function styleGridFeature(feature) {
@@ -374,6 +497,92 @@ async function request(path, options = {}) {
   return response.json();
 }
 
+function getExploreWarning(total) {
+  return total > 1000
+    ? "Cette sélection contient un grand nombre de sites. Affinez les filtres pour une analyse interactive plus rapide."
+    : "";
+}
+
+async function runExplore({ silent = false } = {}) {
+  if (!state.explorePriority) {
+    state.exploreData = null;
+    state.exploreQuery = els.exploreInput?.value?.trim?.() ?? "";
+    renderPrimaryPane();
+    renderPortfolio();
+    return;
+  }
+
+  state.exploreQuery = els.exploreInput?.value?.trim?.() ?? "";
+  state.isExploring = true;
+  if (!silent) renderPrimaryPane();
+
+  try {
+    const payload = await request(
+      `/explore?priority=${encodeURIComponent(state.explorePriority)}&q=${encodeURIComponent(state.exploreQuery)}`,
+    );
+    state.exploreData = payload;
+  } catch (error) {
+    state.exploreData = {
+      counts: { site_matches: 0, company_matches: 0, mapped_sites_displayed: 0 },
+      companies: [],
+      top_sites: [],
+      map_sites: [],
+      all_site_ids: [],
+      error: error.message,
+    };
+  } finally {
+    state.isExploring = false;
+    renderPrimaryPane();
+    renderPortfolio();
+  }
+}
+
+async function analyzeSiteIds(siteIds, { focusSiteId = null } = {}) {
+  if (!siteIds.length) {
+    state.selectedSites.clear();
+    state.latestAnalysis = null;
+    state.isAnalyzing = false;
+    renderPortfolio();
+    renderDetail(null);
+    return;
+  }
+
+  state.isAnalyzing = true;
+  renderPortfolio();
+
+  try {
+    const payload = await request("/portfolio/analyze", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ site_ids: siteIds }),
+    });
+    state.latestAnalysis = payload;
+    state.selectedSites = new Map((payload.sites ?? []).map((site) => [site.site_id, site]));
+    if (focusSiteId) {
+      const focusSite = payload.sites?.find((site) => site.site_id === focusSiteId);
+      if (focusSite) renderDetail(focusSite);
+    }
+  } finally {
+    state.isAnalyzing = false;
+    renderPortfolio();
+  }
+}
+
+async function addExploreSelection({ siren = null } = {}) {
+  if (!state.explorePriority) return;
+  const payload = await request("/explore/resolve", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      priority: state.explorePriority,
+      q: state.exploreQuery,
+      siren,
+    }),
+  });
+  const mergedIds = Array.from(new Set([...state.selectedSites.keys(), ...(payload.site_ids ?? [])]));
+  await analyzeSiteIds(mergedIds, { focusSiteId: payload.site_ids?.[0] ?? null });
+}
+
 function ensureMap() {
   if (map || !window.L) return;
   map = window.L.map("portfolio-map", {
@@ -409,6 +618,10 @@ async function ensureGridLayer() {
         return response.json();
       })
       .then((geojson) => {
+        gridFeatures = (geojson?.features ?? []).map((feature) => ({
+          ...feature,
+          __bbox: computeFeatureBBox(feature),
+        }));
         gridLayer = window.L.geoJSON(geojson, {
           pane: "pane-grid",
           style: styleGridFeature,
@@ -416,6 +629,7 @@ async function ensureGridLayer() {
             layer.bindPopup(buildGridPopup(feature));
           },
         }).addTo(map);
+        renderTopSites();
       })
       .catch((error) => {
         console.warn("Groundwater grid unavailable", error);
@@ -429,10 +643,16 @@ function renderPortfolioMap() {
   if (!map || !portfolioLayer) return;
 
   portfolioLayer.clearLayers();
-  const sites = getAnalyzedSites();
+  const portfolioSites = getAnalyzedSites();
+  const sites = portfolioSites.length ? portfolioSites : state.exploreData?.map_sites ?? [];
   const withCoords = sites.filter((site) => extractLatLng(site));
 
   els.mapEmpty.style.display = withCoords.length ? "none" : "flex";
+  if (!withCoords.length && state.explorePriority && !portfolioSites.length) {
+    els.mapEmpty.textContent = "Aucun site géolocalisé à afficher pour cette sélection.";
+  } else if (!withCoords.length) {
+    els.mapEmpty.textContent = "Ajoutez des sites au portefeuille pour les visualiser sur la carte.";
+  }
 
   for (const site of withCoords) {
     const [lat, lon] = extractLatLng(site);
@@ -505,13 +725,113 @@ function renderCoverage() {
   )} sont aujourd’hui retenus comme pertinents pour une analyse groundwater. Source : ${coverage.reference_label}, ${coverage.reference_date}.`;
 }
 
-function renderSearchResults() {
+function renderPrimaryPane() {
+  if (state.inputMode === "explore") {
+    renderExploreResults();
+    return;
+  }
+  if (state.inputMode === "import") {
+    els.searchResults.className = "result-list empty-state";
+    els.searchMeta.textContent = "Importez une liste de SIREN ou de SIRET pour enrichir directement le portefeuille.";
+    els.searchResults.textContent = "Collez une liste d’identifiants ou importez un fichier pour lancer l’analyse.";
+    return;
+  }
+  renderCompanySearchResults();
+}
+
+function renderExploreResults() {
+  const priorityActive = Boolean(state.explorePriority);
+  els.exploreInput.disabled = !priorityActive;
+  for (const button of els.priorityButtons) {
+    button.classList.toggle("is-active", button.dataset.priorityFilter === state.explorePriority);
+  }
+
+  if (!priorityActive) {
+    els.exploreAlert.textContent = "";
+    els.exploreAlert.classList.remove("is-warning");
+    els.searchMeta.textContent = "Sélectionnez un niveau de criticité pour explorer les entreprises et sites les plus exposés.";
+    els.searchResults.className = "result-list empty-state";
+    els.searchResults.textContent = "Sélectionnez un niveau de criticité pour explorer les entreprises et sites les plus exposés.";
+    renderTopSites();
+    return;
+  }
+
+  const data = state.exploreData;
+  const totalSites = data?.counts?.site_matches ?? 0;
+  const displayedMapSites = data?.counts?.mapped_sites_displayed ?? 0;
+  const warning = getExploreWarning(totalSites);
+  els.exploreAlert.textContent = warning;
+  els.exploreAlert.classList.toggle("is-warning", Boolean(warning));
+
+  if (state.isExploring && !data) {
+    els.searchMeta.textContent = "Exploration en cours...";
+    els.searchResults.className = "result-list empty-state";
+    els.searchResults.textContent = "Chargement de l’univers filtré...";
+    renderTopSites();
+    return;
+  }
+
+  if (!data || totalSites === 0) {
+    els.searchMeta.textContent = "Aucun site ne correspond à cette sélection.";
+    els.searchResults.className = "result-list empty-state";
+    els.searchResults.textContent = "Aucune entreprise correspondante dans l’univers filtré actuel.";
+    renderTopSites();
+    return;
+  }
+
+  els.searchMeta.textContent =
+    totalSites > 1000
+      ? `${formatInteger(totalSites)} sites correspondent au filtre. ${formatInteger(displayedMapSites)} sont affichés sur la carte.`
+      : `${formatInteger(totalSites)} sites correspondent au filtre et sont affichés sur la carte.`;
+
+  const companies = data.companies ?? [];
+  els.searchResults.className = "result-list";
+  const note = totalSites > 1000 ? "Jusqu’à 1000 sites sont affichés sur la carte." : "Tous les sites correspondants sont affichés sur la carte.";
+  els.searchResults.innerHTML = `
+    <div class="result-list-head">
+      <div>
+        <div class="section-eyebrow">Entreprises concernées</div>
+        <p class="portfolio-pane-meta">${formatInteger(data.counts?.company_matches ?? companies.length)} entreprise${(data.counts?.company_matches ?? companies.length) > 1 ? "s" : ""} dans l’univers sélectionné.</p>
+      </div>
+      <div class="result-list-head-actions">
+        <button type="button" data-action="add-explore-all">Ajouter tous les sites filtrés</button>
+        <div class="result-note">${escapeHtml(note)}</div>
+      </div>
+    </div>
+    ${companies
+      .map(
+        (company) => `
+          <article class="result-card">
+            <div class="result-card-head">
+              <div>
+                <p class="eyebrow">Entreprise</p>
+                <h3>${highlightText(company.company_name, state.exploreQuery)}</h3>
+                <p class="mono">${escapeHtml(company.siren)}</p>
+              </div>
+              <div class="inline-actions">
+                <button type="button" data-action="add-explore-company" data-siren="${escapeHtml(company.siren)}">Ajouter les sites</button>
+                <button class="ghost-button" type="button" data-action="inspect-explore-company" data-siren="${escapeHtml(company.siren)}">Voir</button>
+              </div>
+            </div>
+            <div class="badge-row">
+              <span class="priority-pill ${priorityClass(company.best_priority_level)}">${escapeHtml(translatePriority(company.best_priority_level))}</span>
+              <span class="badge">${formatInteger(company.matched_site_count)} site${company.matched_site_count > 1 ? "s" : ""} correspondant${company.matched_site_count > 1 ? "s" : ""}</span>
+            </div>
+          </article>
+        `,
+      )
+      .join("")}
+  `;
+  renderTopSites();
+}
+
+function renderCompanySearchResults() {
   if (!state.searchResults.length) {
     els.searchResults.className = "result-list empty-state";
     if (!state.currentQuery) {
-      els.searchResults.textContent = "Tape au moins 2 caractères pour lancer la recherche en direct.";
+      els.searchResults.textContent = "Saisissez au moins 2 caractères pour lancer la recherche en direct.";
     } else if (state.currentQuery.length < 2) {
-      els.searchResults.textContent = "Continue à taper — la recherche en direct démarre à partir de 2 caractères.";
+      els.searchResults.textContent = "Continuez à saisir — la recherche en direct démarre à partir de 2 caractères.";
     } else {
       els.searchResults.textContent = "Aucune entreprise correspondante trouvée dans l’index France actuellement chargé.";
     }
@@ -583,9 +903,31 @@ function renderSearchResults() {
 
 function renderSummary() {
   const summary = state.latestAnalysis?.summary;
-  if (!summary && !state.isAnalyzing) {
+  if (!summary && !state.isAnalyzing && !(state.explorePriority && state.exploreData)) {
     els.summaryGrid.className = "summary-grid empty-state";
     els.summaryGrid.textContent = "Ajoutez une première entreprise pour voir le signal portefeuille se construire.";
+    return;
+  }
+
+  if (!summary && state.explorePriority && state.exploreData) {
+    const counts = state.exploreData.counts ?? {};
+    const items = [
+      ["Entreprises concernées", formatInteger(counts.company_matches ?? 0)],
+      ["Sites concernés", formatInteger(counts.site_matches ?? 0)],
+      ["Sites affichés", formatInteger(counts.mapped_sites_displayed ?? 0)],
+      ["Top 10", "Sites prioritaires"],
+    ];
+    els.summaryGrid.className = "summary-grid";
+    els.summaryGrid.innerHTML = items
+      .map(
+        ([label, value]) => `
+          <div class="summary-card">
+            <div class="summary-label">${escapeHtml(label)}</div>
+            <div class="summary-value">${escapeHtml(value)}</div>
+          </div>
+        `,
+      )
+      .join("");
     return;
   }
 
@@ -623,7 +965,9 @@ function renderPortfolioList() {
   const sites = getAnalyzedSites();
   if (!sites.length) {
     els.selectionList.className = "scroll-pane portfolio-pane selection-list empty-state";
-    els.selectionList.textContent = "Ajoutez des sites depuis les résultats de recherche pour construire le portefeuille en direct.";
+    els.selectionList.textContent = state.explorePriority
+      ? "Ajoutez des sites filtrés depuis la colonne de droite pour construire le portefeuille en direct."
+      : "Ajoutez des sites depuis les résultats de recherche pour construire le portefeuille en direct.";
     return;
   }
 
@@ -687,6 +1031,48 @@ function renderPortfolioList() {
     </div>
   `;
   els.selectionList.innerHTML = `${headHtml}<div class="portfolio-groups">${els.selectionList.innerHTML}</div>`;
+}
+
+function renderTopSites() {
+  const portfolioSites = getAnalyzedSites();
+  const sitesSource = portfolioSites.length
+    ? portfolioSites
+    : state.explorePriority
+      ? state.exploreData?.top_sites ?? []
+      : [];
+  const sites = [...sitesSource].sort(compareSitesByExposure).slice(0, 10);
+  if (!sites.length) {
+    els.topSitesList.className = "analysis-results empty-state";
+    els.topSitesList.textContent = "Sélectionnez un niveau de criticité pour afficher les sites prioritaires.";
+    return;
+  }
+
+  els.topSitesList.className = "top-sites-list";
+  els.topSitesList.innerHTML = sites
+    .map((site) => {
+      const withdrawalVolume = formatWithdrawalVolume(site);
+      const secondaryMetric = withdrawalVolume
+        ? `Prélèvements : ${withdrawalVolume}`
+        : `Pression locale : ${humanPressureLevel(site.pressure_level || "Unknown")}`;
+      return `
+        <article class="top-site-row">
+          <div>
+            <div class="top-site-title">${escapeHtml(site.site_name)}</div>
+            <p class="top-site-company">${escapeHtml(site.company_name)}</p>
+            <div class="badge-row">
+              <span class="priority-pill ${priorityClass(site.priority_level || "Low")}">${escapeHtml(translatePriority(site.priority_level || "Low"))}</span>
+              <span class="badge">Nappe : ${escapeHtml(formatTrendDelta(site.aquifer_trend_value_cm_20y))}</span>
+              <span class="badge">${escapeHtml(secondaryMetric)}</span>
+              <span class="badge">${escapeHtml(site.city || "Ville inconnue")}</span>
+            </div>
+          </div>
+          <div class="inline-actions">
+            <button class="ghost-button" type="button" data-action="inspect-site-inline" data-site-id="${escapeHtml(site.site_id)}">Voir</button>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
 }
 
 function renderDetail(site) {
@@ -820,12 +1206,12 @@ async function runSearch(query, { silent = false } = {}) {
     }
 
     renderCoverage();
-    renderSearchResults();
+    renderPrimaryPane();
   } catch (error) {
     state.searchResults = [];
     els.searchMeta.textContent = error.message;
     renderCoverage();
-    renderSearchResults();
+    renderPrimaryPane();
   }
 }
 
@@ -833,38 +1219,13 @@ function renderPortfolio() {
   renderSummary();
   renderPortfolioList();
   renderPortfolioMap();
+  renderTopSites();
+  syncPortfolioPaneHeight();
 }
 
 async function syncPortfolioAnalysis({ focusSiteId = null } = {}) {
   const siteIds = Array.from(state.selectedSites.keys());
-  if (!siteIds.length) {
-    state.isAnalyzing = false;
-    state.latestAnalysis = null;
-    renderPortfolio();
-    renderDetail(null);
-    return;
-  }
-
-  state.isAnalyzing = true;
-  renderPortfolio();
-
-  try {
-    const payload = await request("/portfolio/analyze", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ site_ids: siteIds }),
-    });
-    state.latestAnalysis = payload;
-    if (focusSiteId) {
-      const focusSite = payload.sites?.find((site) => site.site_id === focusSiteId);
-      if (focusSite) renderDetail(focusSite);
-    }
-  } catch (error) {
-    els.selectionMeta.textContent = error.message;
-  } finally {
-    state.isAnalyzing = false;
-    renderPortfolio();
-  }
+  await analyzeSiteIds(siteIds, { focusSiteId });
 }
 
 async function addCompanySites(siren) {
@@ -873,7 +1234,9 @@ async function addCompanySites(siren) {
     els.searchMeta.textContent = "Entreprise reconnue, mais aucun établissement éligible au score n’est disponible pour le moment.";
     return;
   }
-  for (const site of payload.sites ?? []) state.selectedSites.set(site.site_id, site);
+  const merged = new Map(state.selectedSites);
+  for (const site of payload.sites ?? []) merged.set(site.site_id, site);
+  state.selectedSites = merged;
   await syncPortfolioAnalysis({ focusSiteId: payload.sites?.[0]?.site_id ?? null });
 }
 
@@ -1015,7 +1378,13 @@ document.addEventListener("click", async (event) => {
 
   const action = target.dataset.action;
   try {
-    if (action === "add-company") {
+    if (action === "add-explore-all") {
+      await addExploreSelection();
+    } else if (action === "add-explore-company") {
+      await addExploreSelection({ siren: target.dataset.siren });
+    } else if (action === "inspect-explore-company") {
+      await inspectCompany(target.dataset.siren);
+    } else if (action === "add-company") {
       await addCompanySites(target.dataset.siren);
     } else if (action === "inspect-company") {
       await inspectCompany(target.dataset.siren);
@@ -1069,14 +1438,14 @@ els.searchInput.addEventListener("input", () => {
   if (query.length === 0) {
     state.searchResults = [];
     els.searchMeta.textContent = "Pas encore de recherche.";
-    renderSearchResults();
+    renderPrimaryPane();
     return;
   }
 
   if (query.length < 2) {
     state.searchResults = [];
-    els.searchMeta.textContent = "Tape au moins 2 caractères pour lancer la recherche en direct.";
-    renderSearchResults();
+    els.searchMeta.textContent = "Saisissez au moins 2 caractères pour lancer la recherche en direct.";
+    renderPrimaryPane();
     return;
   }
 
@@ -1085,17 +1454,35 @@ els.searchInput.addEventListener("input", () => {
   }, 180);
 });
 
+els.exploreInput?.addEventListener("input", () => {
+  if (!state.explorePriority) return;
+  if (searchDebounce) clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(() => {
+    runExplore({ silent: false });
+  }, 180);
+});
+
+els.exploreReset?.addEventListener("click", () => {
+  state.explorePriority = "";
+  state.exploreQuery = "";
+  state.exploreData = null;
+  if (els.exploreInput) els.exploreInput.value = "";
+  renderPrimaryPane();
+  renderPortfolio();
+  renderDetail(null);
+});
+
 els.eligibleOnly?.addEventListener("change", () => {
   state.eligibleOnly = Boolean(els.eligibleOnly.checked);
   const query = els.searchInput.value.trim();
   if (!query) {
     els.searchMeta.textContent = "Pas encore de recherche.";
     state.searchResults = [];
-    renderSearchResults();
+    renderPrimaryPane();
     return;
   }
   if (query.length < 2) {
-    renderSearchResults();
+    renderPrimaryPane();
     return;
   }
   runSearch(query);
@@ -1103,6 +1490,15 @@ els.eligibleOnly?.addEventListener("change", () => {
 
 for (const button of els.modeTabs) {
   button.addEventListener("click", () => setInputMode(button.dataset.modeTab));
+}
+
+for (const button of els.priorityButtons) {
+  button.addEventListener("click", async () => {
+    state.explorePriority = button.dataset.priorityFilter ?? "";
+    state.exploreData = null;
+    if (els.exploreInput && !state.explorePriority) els.exploreInput.value = "";
+    await runExplore({ silent: false });
+  });
 }
 
 for (const button of els.importTypeButtons) {
@@ -1114,7 +1510,7 @@ els.importFileInput?.addEventListener("change", async (event) => {
   if (!file) return;
   const text = await file.text();
   els.importInput.value = text;
-  els.importMeta.textContent = `${file.name} chargé. Vérifie le type d’identifiant puis lance l’ajout.`;
+  els.importMeta.textContent = `${file.name} chargé. Vérifiez le type d’identifiant puis lancez l’ajout.`;
   event.target.value = "";
 });
 
@@ -1128,8 +1524,9 @@ els.clearSelection.addEventListener("click", async () => {
 });
 
 checkHealth();
-setInputMode("search");
+setInputMode("explore");
 setImportType("siret");
-renderSearchResults();
+renderPrimaryPane();
 renderPortfolio();
 renderDetail(null);
+window.addEventListener("resize", syncPortfolioPaneHeight);

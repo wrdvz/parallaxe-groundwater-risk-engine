@@ -34,8 +34,8 @@
         <section class="panel">
           <div class="panel-header">
             <div>
-              <p class="panel-kicker">1. Recherche</p>
-              <h2>Trouver des entreprises</h2>
+              <p class="panel-kicker">1. Explorer ou rechercher</p>
+              <h2>Définissez un univers de risque, puis affinez-le par entreprise si besoin.</h2>
             </div>
           </div>
 
@@ -43,11 +43,47 @@
             <div class="split-left panel-column">
               <div class="stack-card search-stack-card">
                 <div class="mode-tabs" role="tablist" aria-label="Mode d’entrée portefeuille">
-                  <button class="mode-tab is-active" id="tab-search" type="button" data-mode-tab="search">Recherche</button>
+                  <button class="mode-tab is-active" id="tab-explore" type="button" data-mode-tab="explore">Explorer les risques</button>
+                  <button class="mode-tab" id="tab-search" type="button" data-mode-tab="search">Rechercher une entreprise</button>
                   <button class="mode-tab" id="tab-import" type="button" data-mode-tab="import">Import portefeuille</button>
                 </div>
 
-                <div id="search-mode-pane" class="mode-pane is-active">
+                <div id="explore-mode-pane" class="mode-pane is-active">
+                  <div class="explore-stack">
+                    <div class="subpanel">
+                      <div class="subpanel-title">Explorer les risques</div>
+                      <p class="search-helper">
+                        Sélectionnez un niveau de criticité pour explorer les entreprises et sites les plus exposés.
+                      </p>
+                      <div class="chip-group" id="explore-priority-group" role="radiogroup" aria-label="Niveau de criticité">
+                        <button class="toggle-chip" type="button" data-priority-filter="Critical">Critique</button>
+                        <button class="toggle-chip" type="button" data-priority-filter="High">Élevée</button>
+                        <button class="toggle-chip" type="button" data-priority-filter="Moderate">Modérée</button>
+                        <button class="toggle-chip" type="button" data-priority-filter="Low">Faible</button>
+                      </div>
+                      <div class="explore-alert" id="explore-alert"></div>
+                    </div>
+                    <div class="subpanel">
+                      <div class="subpanel-title">Affiner par entreprise</div>
+                      <p class="search-helper">
+                        Affinez l’univers sélectionné par nom d’entreprise, SIREN ou SIRET.
+                      </p>
+                      <div class="search-row">
+                        <input
+                          id="explore-input"
+                          name="explore-q"
+                          type="search"
+                          placeholder="Nestlé, Danone, Saint-Gobain, 552100554..."
+                          autocomplete="off"
+                          disabled
+                        />
+                        <button id="explore-reset" class="ghost-button" type="button">Réinitialiser</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div id="search-mode-pane" class="mode-pane">
                   <form id="search-form" class="search-form">
                     <label class="search-label" for="search-input">Rechercher une entreprise, un SIREN ou un SIRET</label>
                     <div class="search-row">
@@ -124,9 +160,9 @@
 
             <div class="split-right">
               <div class="scroll-pane result-pane">
-                <div class="result-meta" id="search-meta">Pas encore de recherche.</div>
+                <div class="result-meta" id="search-meta">Sélectionnez un niveau de criticité pour explorer les entreprises et sites les plus exposés.</div>
                 <div id="search-results" class="result-list empty-state">
-                  Les résultats de recherche apparaîtront ici.
+                  Sélectionnez un niveau de criticité pour explorer les entreprises et sites les plus exposés.
                 </div>
               </div>
             </div>
@@ -204,6 +240,17 @@
                   <div id="portfolio-map"></div>
                   <div id="portfolio-map-empty" class="map-empty-state">
                     Ajoutez des sites au portefeuille pour les visualiser sur la carte.
+                  </div>
+                </div>
+                <div class="analysis-card top-sites-card" id="top-sites-card">
+                  <div class="analysis-card-head">
+                    <div>
+                      <p class="eyebrow">Top 10</p>
+                      <h3>Sites les plus exposés</h3>
+                    </div>
+                  </div>
+                  <div id="top-sites-list" class="analysis-results empty-state">
+                    Sélectionnez un niveau de criticité pour afficher les sites prioritaires.
                   </div>
                 </div>
               </div>

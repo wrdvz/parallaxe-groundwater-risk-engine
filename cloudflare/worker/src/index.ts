@@ -23,15 +23,23 @@ type Site = {
   source_url?: string | null;
   grid_class: string | null;
   pressure_level?: string | null;
+  withdrawal_pressure_volume_m3?: number | null;
   aquifer_trend_level?: string | null;
   aquifer_trend_value_cm_20y?: number | null;
   aquifer_trend_mean_cm_20y?: number | null;
   nearest_station_distance_km?: number | null;
   station_count?: number | null;
   groundwater_signal_robust?: boolean | null;
+  groundwater_decline_percentile?: number | null;
+  withdrawal_volume_percentile?: number | null;
+  groundwater_decline_decile?: number | null;
+  withdrawal_volume_decile?: number | null;
   priority_level: PriorityLevel;
   dependency_probability: DependencyProbability;
   dependency_score_1_10?: number | null;
+  groundwater_score_10?: number | null;
+  withdrawal_score_10?: number | null;
+  criticality_score_10?: number | null;
   is_water_relevant?: boolean | null;
   within_water_scope?: boolean | null;
   confidence_label: ConfidenceLabel;
@@ -59,6 +67,13 @@ type SearchResult =
       is_icpe: boolean;
       is_geolocated: boolean;
     };
+
+type ExploreCompany = {
+  siren: string;
+  company_name: string;
+  matched_site_count: number;
+  best_priority_level: PriorityLevel;
+};
 
 type Env = {
   APP_NAME?: string;
@@ -351,6 +366,12 @@ function prioritySortValue(level: PriorityLevel): number {
   return { Critical: 0, High: 1, Moderate: 2, Low: 3 }[level];
 }
 
+function sortSitesByPriority(a: Site, b: Site): number {
+  const delta = prioritySortValue(a.priority_level) - prioritySortValue(b.priority_level);
+  if (delta !== 0) return delta;
+  return String(a.site_name || "").localeCompare(String(b.site_name || ""), "fr", { sensitivity: "base" });
+}
+
 function portfolioSummary(selectedSites: Site[]) {
   const countBy = (level: PriorityLevel) => selectedSites.filter((site) => site.priority_level === level).length;
   const critical = countBy("Critical");
@@ -369,6 +390,319 @@ function portfolioSummary(selectedSites: Site[]) {
     low_count: low,
     portfolio_priority_label: critical > 0 ? "Critical" : high > 0 ? "Elevated" : moderate > 0 ? "Moderate" : "Low",
   };
+}
+
+const SITE_DETAIL_SELECT = `
+  SELECT
+    s.site_id, s.siren, s.siret, s.company_name, s.site_name, s.city, s.address_line, s.postal_code,
+    s.is_icpe, s.is_geolocated, s.geo_score, s.geo_type, s.geoloc_confidence_label, s.icpe_category,
+    s.naf_code, s.naf_label, s.source_url,
+    s.lat, s.lon,
+    h.grid_class, h.pressure_level, h.aquifer_trend_level, h.aquifer_trend_value_cm_20y,
+    h.aquifer_trend_mean_cm_20y, h.nearest_station_distance_km, h.station_count, h.groundwater_signal_robust,
+    h.withdrawal_pressure_volume_m3, h.groundwater_decline_percentile, h.withdrawal_volume_percentile,
+    h.groundwater_decline_decile, h.withdrawal_volume_decile,
+    r.priority_level, r.dependency_probability, r.confidence_label, r.risk_explanation_short,
+    r.dependency_score_1_10, r.groundwater_score_10, r.withdrawal_score_10, r.criticality_score_10,
+    r.is_water_relevant, r.within_water_scope, r.score_version
+  FROM sites s
+  LEFT JOIN site_hydro_context h ON h.site_id = s.site_id
+  LEFT JOIN site_risk_scores r ON r.site_id = s.site_id
+`;
+
+function buildExploreFilters(params: { priority?: string | null; query?: string | null; siren?: string | null }) {
+  const clauses: string[] = [];
+  const bindings: string[] = [];
+  const push = (value: string) => {
+    bindings.push(value);
+    return `?${bindings.length}`;
+  };
+
+  if (params.priority && params.priority !== "All") {
+    clauses.push(`r.priority_level = ${push(params.priority)}`);
+  }
+
+  if (params.siren) {
+    clauses.push(`s.siren = ${push(normalizeDigits(params.siren))}`);
+  }
+
+  const q = params.query?.trim() ?? "";
+  if (q) {
+    const normalized = normalizeText(q);
+    const searchName = buildSearchName(q) || normalized;
+    const searchTokens = searchName.split(/\s+/).filter(Boolean).slice(0, 4);
+    const digitsOnly = normalizeDigits(q);
+    const textClauses = [
+      `UPPER(s.company_name) LIKE ${push(`%${normalized}%`)}`,
+      `UPPER(s.site_name) LIKE ${push(`%${normalized}%`)}`,
+      `UPPER(s.city) LIKE ${push(`%${normalized}%`)}`,
+    ];
+    if (digitsOnly) {
+      textClauses.push(`s.siren LIKE ${push(`${digitsOnly}%`)}`);
+      textClauses.push(`s.siret LIKE ${push(`${digitsOnly}%`)}`);
+    }
+    for (const token of searchTokens) {
+      textClauses.push(`s.search_name LIKE ${push(`${token}%`)}`);
+      textClauses.push(`s.search_name LIKE ${push(`% ${token}%`)}`);
+    }
+    clauses.push(`(${textClauses.join(" OR ")})`);
+  }
+
+  return {
+    where: clauses.length ? clauses.join(" AND ") : "1=1",
+    bindings,
+  };
+}
+
+function priorityFromRank(rank: number): PriorityLevel {
+  return rank === 0 ? "Critical" : rank === 1 ? "High" : rank === 2 ? "Moderate" : "Low";
+}
+
+async function getSitesByIds(env: Env, siteIds: string[]): Promise<Site[]> {
+  if (siteIds.length === 0) return [];
+  if (!env.DB) {
+    const wanted = new Set(siteIds);
+    return mockSites.filter((site) => wanted.has(site.site_id)).sort(sortSitesByPriority);
+  }
+
+  const uniqueIds = Array.from(new Set(siteIds));
+  const chunkSize = 90;
+  const rows: Site[] = [];
+
+  for (let start = 0; start < uniqueIds.length; start += chunkSize) {
+    const chunk = uniqueIds.slice(start, start + chunkSize);
+    const placeholders = chunk.map((_, idx) => `?${idx + 1}`).join(", ");
+    const result = await env.DB
+      .prepare(
+        `
+        ${SITE_DETAIL_SELECT}
+        WHERE s.site_id IN (${placeholders})
+        `,
+      )
+      .bind(...chunk)
+      .all();
+    rows.push(...((result.results ?? []) as unknown as Site[]));
+  }
+
+  const order = new Map(uniqueIds.map((siteId, idx) => [siteId, idx]));
+  return rows.sort((a, b) => (order.get(a.site_id) ?? 0) - (order.get(b.site_id) ?? 0));
+}
+
+async function queryExploreD1(
+  env: Env,
+  params: { priority?: string | null; query?: string | null },
+): Promise<{
+  counts: { site_matches: number; company_matches: number; mapped_sites_displayed: number };
+  companies: ExploreCompany[];
+  top_sites: Site[];
+  map_sites: Site[];
+  all_site_ids: string[];
+}> {
+  if (!env.DB) return { counts: { site_matches: 0, company_matches: 0, mapped_sites_displayed: 0 }, companies: [], top_sites: [], map_sites: [], all_site_ids: [] };
+
+  const { where, bindings } = buildExploreFilters(params);
+  const priorityOrderSql = `
+    CASE r.priority_level
+      WHEN 'Critical' THEN 0
+      WHEN 'High' THEN 1
+      WHEN 'Moderate' THEN 2
+      ELSE 3
+    END
+  `;
+
+  const siteCountRow = await env.DB
+    .prepare(
+      `
+      SELECT COUNT(*) AS count
+      FROM sites s
+      LEFT JOIN site_risk_scores r ON r.site_id = s.site_id
+      WHERE ${where}
+      `,
+    )
+    .bind(...bindings)
+    .first<{ count: number | string }>();
+
+  const companyCountRow = await env.DB
+    .prepare(
+      `
+      SELECT COUNT(DISTINCT s.siren) AS count
+      FROM sites s
+      LEFT JOIN site_risk_scores r ON r.site_id = s.site_id
+      WHERE ${where}
+      `,
+    )
+    .bind(...bindings)
+    .first<{ count: number | string }>();
+
+  const companyRows = await env.DB
+    .prepare(
+      `
+      SELECT
+        s.siren,
+        s.company_name,
+        COUNT(*) AS matched_site_count,
+        MIN(${priorityOrderSql}) AS best_priority_rank
+      FROM sites s
+      LEFT JOIN site_risk_scores r ON r.site_id = s.site_id
+      WHERE ${where}
+      GROUP BY s.siren, s.company_name
+      ORDER BY best_priority_rank ASC, matched_site_count DESC, s.company_name ASC
+      LIMIT 50
+      `,
+    )
+    .bind(...bindings)
+    .all();
+
+  const topSiteRows = await env.DB
+    .prepare(
+      `
+      ${SITE_DETAIL_SELECT}
+      WHERE ${where}
+      ORDER BY ${priorityOrderSql} ASC, s.is_icpe DESC, s.site_name ASC
+      LIMIT 10
+      `,
+    )
+    .bind(...bindings)
+    .all();
+
+  const mapSiteRows = await env.DB
+    .prepare(
+      `
+      ${SITE_DETAIL_SELECT}
+      WHERE ${where} AND s.is_geolocated = 1
+      ORDER BY ${priorityOrderSql} ASC, s.is_icpe DESC, s.site_name ASC
+      LIMIT 1000
+      `,
+    )
+    .bind(...bindings)
+    .all();
+
+  const allIdsRows = await env.DB
+    .prepare(
+      `
+      SELECT s.site_id
+      FROM sites s
+      LEFT JOIN site_risk_scores r ON r.site_id = s.site_id
+      WHERE ${where}
+      ORDER BY ${priorityOrderSql} ASC, s.is_icpe DESC, s.site_name ASC
+      `,
+    )
+    .bind(...bindings)
+    .all();
+
+  return {
+    counts: {
+      site_matches: Number(siteCountRow?.count ?? 0),
+      company_matches: Number(companyCountRow?.count ?? 0),
+      mapped_sites_displayed: (mapSiteRows.results ?? []).length,
+    },
+    companies: ((companyRows.results ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      siren: String(row.siren),
+      company_name: String(row.company_name),
+      matched_site_count: Number(row.matched_site_count ?? 0),
+      best_priority_level: priorityFromRank(Number(row.best_priority_rank ?? 3)),
+    })),
+    top_sites: (topSiteRows.results ?? []) as unknown as Site[],
+    map_sites: (mapSiteRows.results ?? []) as unknown as Site[],
+    all_site_ids: ((allIdsRows.results ?? []) as Array<Record<string, unknown>>).map((row) => String(row.site_id)),
+  };
+}
+
+async function queryExploreMock(
+  params: { priority?: string | null; query?: string | null },
+): Promise<{
+  counts: { site_matches: number; company_matches: number; mapped_sites_displayed: number };
+  companies: ExploreCompany[];
+  top_sites: Site[];
+  map_sites: Site[];
+  all_site_ids: string[];
+}> {
+  const q = params.query?.trim() ?? "";
+  const normalized = normalizeText(q);
+  const digits = normalizeDigits(q);
+  const filtered = mockSites.filter((site) => {
+    const matchesPriority = !params.priority || params.priority === "All" || site.priority_level === params.priority;
+    if (!matchesPriority) return false;
+    if (!q) return true;
+    return (
+      normalizeText(site.company_name).includes(normalized) ||
+      normalizeText(site.site_name).includes(normalized) ||
+      normalizeText(site.city).includes(normalized) ||
+      (digits && (site.siren.startsWith(digits) || site.siret.startsWith(digits)))
+    );
+  });
+
+  const grouped = groupMockSitesForExplore(filtered);
+  return {
+    counts: {
+      site_matches: filtered.length,
+      company_matches: grouped.length,
+      mapped_sites_displayed: filtered.filter((site) => site.is_geolocated).slice(0, 1000).length,
+    },
+    companies: grouped.map((group) => ({
+      siren: group.siren,
+      company_name: group.company_name,
+      matched_site_count: group.sites.length,
+      best_priority_level: group.sites[0]?.priority_level ?? "Low",
+    })),
+    top_sites: [...filtered].sort(sortSitesByPriority).slice(0, 10),
+    map_sites: filtered.filter((site) => site.is_geolocated).sort(sortSitesByPriority).slice(0, 1000),
+    all_site_ids: filtered.map((site) => site.site_id),
+  };
+}
+
+async function resolveExploreSiteIds(
+  env: Env,
+  params: { priority?: string | null; query?: string | null; siren?: string | null },
+): Promise<string[]> {
+  if (!params.priority) return [];
+  if (!env.DB) {
+    const payload = await queryExploreMock({ priority: params.priority, query: params.query });
+    if (!params.siren) return payload.all_site_ids;
+    const wanted = new Set(mockSites.filter((site) => site.siren === params.siren).map((site) => site.site_id));
+    return payload.all_site_ids.filter((siteId) => wanted.has(siteId));
+  }
+
+  const { where, bindings } = buildExploreFilters(params);
+  const rows = await env.DB
+    .prepare(
+      `
+      SELECT s.site_id
+      FROM sites s
+      LEFT JOIN site_risk_scores r ON r.site_id = s.site_id
+      WHERE ${where}
+      ORDER BY
+        CASE r.priority_level
+          WHEN 'Critical' THEN 0
+          WHEN 'High' THEN 1
+          WHEN 'Moderate' THEN 2
+          ELSE 3
+        END,
+        s.is_icpe DESC,
+        s.site_name ASC
+      `,
+    )
+    .bind(...bindings)
+    .all();
+  return ((rows.results ?? []) as Array<Record<string, unknown>>).map((row) => String(row.site_id));
+}
+
+function groupMockSitesForExplore(sites: Site[]) {
+  const groups = new Map<string, { siren: string; company_name: string; sites: Site[] }>();
+  for (const site of sites) {
+    if (!groups.has(site.siren)) {
+      groups.set(site.siren, { siren: site.siren, company_name: site.company_name, sites: [] });
+    }
+    groups.get(site.siren)!.sites.push(site);
+  }
+  return [...groups.values()]
+    .map((group) => ({ ...group, sites: group.sites.sort(sortSitesByPriority) }))
+    .sort((a, b) => {
+      const rank = prioritySortValue(a.sites[0]?.priority_level ?? "Low") - prioritySortValue(b.sites[0]?.priority_level ?? "Low");
+      if (rank !== 0) return rank;
+      return b.sites.length - a.sites.length || a.company_name.localeCompare(b.company_name, "fr", { sensitivity: "base" });
+    })
+    .slice(0, 50);
 }
 
 async function querySearchD1(
@@ -1064,7 +1398,7 @@ export default {
         stage: env.APP_STAGE ?? "mvp",
         storage: env.DB ? "d1" : "mock",
         coverage,
-        endpoints: ["/health", "/search?q=", "/company/:siren", "/site/:id", "/portfolio/analyze"],
+        endpoints: ["/health", "/search?q=", "/explore", "/explore/resolve", "/company/:siren", "/site/:id", "/portfolio/analyze"],
       });
     }
 
@@ -1084,6 +1418,39 @@ export default {
       if (!q) return json({ query: q, results: [] });
       const payload = env.DB ? await querySearchD1(env, q, eligibleOnly) : mockSearch(q);
       return json({ query: q, ...payload, coverage, storage: env.DB ? "d1" : "mock" });
+    }
+
+    if (request.method === "GET" && url.pathname === "/explore") {
+      const priority = url.searchParams.get("priority")?.trim() ?? "";
+      const q = url.searchParams.get("q")?.trim() ?? "";
+      if (!priority) {
+        return json({
+          priority,
+          query: q,
+          counts: { site_matches: 0, company_matches: 0, mapped_sites_displayed: 0 },
+          companies: [],
+          top_sites: [],
+          map_sites: [],
+          all_site_ids: [],
+          coverage,
+          storage: env.DB ? "d1" : "mock",
+        });
+      }
+      const payload = env.DB ? await queryExploreD1(env, { priority, query: q }) : await queryExploreMock({ priority, query: q });
+      return json({ priority, query: q, ...payload, coverage, storage: env.DB ? "d1" : "mock" });
+    }
+
+    if (request.method === "POST" && url.pathname === "/explore/resolve") {
+      let body: { priority?: string; q?: string; siren?: string };
+      try {
+        body = (await request.json()) as typeof body;
+      } catch {
+        return json({ error: "Invalid JSON body" }, 400);
+      }
+      const priority = body.priority?.trim() ?? "";
+      if (!priority) return json({ error: "Priority filter required" }, 400);
+      const resolvedIds = await resolveExploreSiteIds(env, { priority, query: body.q ?? "", siren: body.siren ?? "" });
+      return json({ site_ids: resolvedIds, count: resolvedIds.length, storage: env.DB ? "d1" : "mock" });
     }
 
     if (request.method === "GET") {
@@ -1116,8 +1483,7 @@ export default {
       let selectedSites: Site[] = [];
 
       if (Array.isArray(body.site_ids) && body.site_ids.length > 0) {
-        const siteDetails = await Promise.all(body.site_ids.map((siteId) => getSiteDetail(env, siteId)));
-        selectedSites = siteDetails.filter(Boolean) as Site[];
+        selectedSites = await getSitesByIds(env, body.site_ids);
       } else if (Array.isArray(body.inputs) && body.inputs.length > 0) {
         const resolved = await Promise.all(body.inputs.map((input) => resolveInputToSites(env, input)));
         selectedSites = resolved.flat();

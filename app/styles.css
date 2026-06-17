@@ -177,12 +177,33 @@ h1 {
 
 .split-panel-portfolio .split-right {
   display: flex;
+  min-height: 0;
 }
 
 .search-form {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.explore-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.subpanel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-alt);
+}
+
+.subpanel-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
 }
 
 .search-label {
@@ -218,6 +239,23 @@ h1 {
   display: inline-flex;
   gap: 8px;
   margin-bottom: 10px;
+}
+
+.chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.explore-alert {
+  min-height: 18px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.explore-alert.is-warning {
+  color: #ad5d1f;
 }
 
 .import-textarea {
@@ -435,11 +473,20 @@ button:disabled {
 .split-panel-portfolio .portfolio-pane {
   height: 100%;
   flex: 1;
+  min-height: 0;
 }
 
 .result-pane {
   display: flex;
   flex-direction: column;
+  padding: 14px;
+}
+
+.result-meta {
+  margin-bottom: 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 #search-results {
@@ -454,6 +501,7 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-height: 0;
 }
 
 .result-card,
@@ -469,6 +517,27 @@ button:disabled {
 .result-card,
 .analysis-card {
   padding: 14px;
+}
+
+.result-list-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.result-list-head-actions {
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+}
+
+.result-note {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: right;
 }
 
 .result-card-head,
@@ -556,6 +625,38 @@ button:disabled {
   flex-direction: column;
   overflow: hidden;
   flex: 1;
+}
+
+.top-sites-card {
+  margin: 0 14px 14px;
+}
+
+.top-sites-list {
+  display: grid;
+  gap: 10px;
+}
+
+.top-site-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.top-site-title {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.top-site-company {
+  margin: 0 0 8px;
+  color: var(--text-muted);
+  font-size: 13px;
 }
 
 .portfolio-map-header,
@@ -690,6 +791,7 @@ button:disabled {
 .portfolio-groups {
   display: grid;
   gap: 10px;
+  min-height: 0;
 }
 
 .portfolio-group {

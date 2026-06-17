@@ -50,7 +50,12 @@ CREATE TABLE IF NOT EXISTS site_hydro_context (
   aquifer_trend_level TEXT,
   aquifer_signal_marker TEXT,
   grid_class TEXT,
-  pressure_level TEXT
+  pressure_level TEXT,
+  withdrawal_pressure_volume_m3 REAL,
+  groundwater_decline_percentile REAL,
+  withdrawal_volume_percentile REAL,
+  groundwater_decline_decile INTEGER,
+  withdrawal_volume_decile INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS site_risk_scores (
@@ -61,6 +66,9 @@ CREATE TABLE IF NOT EXISTS site_risk_scores (
   risk_explanation_short TEXT NOT NULL,
   score_version TEXT NOT NULL,
   dependency_score_1_10 REAL,
+  groundwater_score_10 REAL,
+  withdrawal_score_10 REAL,
+  criticality_score_10 REAL,
   is_water_relevant INTEGER NOT NULL DEFAULT 0,
   within_water_scope INTEGER NOT NULL DEFAULT 0
 );
