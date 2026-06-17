@@ -400,10 +400,8 @@ const SITE_DETAIL_SELECT = `
     s.lat, s.lon,
     h.grid_class, h.pressure_level, h.aquifer_trend_level, h.aquifer_trend_value_cm_20y,
     h.aquifer_trend_mean_cm_20y, h.nearest_station_distance_km, h.station_count, h.groundwater_signal_robust,
-    h.withdrawal_pressure_volume_m3, h.groundwater_decline_percentile, h.withdrawal_volume_percentile,
-    h.groundwater_decline_decile, h.withdrawal_volume_decile,
     r.priority_level, r.dependency_probability, r.confidence_label, r.risk_explanation_short,
-    r.dependency_score_1_10, r.groundwater_score_10, r.withdrawal_score_10, r.criticality_score_10,
+    r.dependency_score_1_10,
     r.is_water_relevant, r.within_water_scope, r.score_version
   FROM sites s
   LEFT JOIN site_hydro_context h ON h.site_id = s.site_id
