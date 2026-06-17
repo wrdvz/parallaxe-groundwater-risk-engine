@@ -280,6 +280,21 @@ function formatWithdrawalVolume(site) {
   return `${formatInteger(numeric)} m3/an`;
 }
 
+function formatScoreOn10(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const numeric = Number(value);
+  if (Number.isNaN(numeric)) return null;
+  return `${numeric.toFixed(1)} / 10`;
+}
+
+function formatLevelOn10(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  const level = Math.min(10, Math.max(1, Math.round(numeric)));
+  return `${level} / 10`;
+}
+
 function methodologyNote(site) {
   const parts = [];
   if (site.dependency_score_1_10 !== null && site.dependency_score_1_10 !== undefined) {
@@ -338,8 +353,12 @@ function sortSitesByPriority(a, b) {
 }
 
 function compareSitesByExposure(a, b) {
-  const priorityDelta = (PRIORITY_ORDER[a.priority_level] ?? 99) - (PRIORITY_ORDER[b.priority_level] ?? 99);
-  if (priorityDelta !== 0) return priorityDelta;
+  const scoreA = Number(a.criticality_score_10);
+  const scoreB = Number(b.criticality_score_10);
+  const hasScoreA = Number.isFinite(scoreA);
+  const hasScoreB = Number.isFinite(scoreB);
+  if (hasScoreA && hasScoreB && scoreA !== scoreB) return scoreB - scoreA;
+  if (hasScoreA !== hasScoreB) return hasScoreA ? -1 : 1;
 
   const volumeA = getWithdrawalVolumeValue(a);
   const volumeB = getWithdrawalVolumeValue(b);
@@ -1049,25 +1068,37 @@ function renderTopSites() {
 
   els.topSitesList.className = "top-sites-list";
   els.topSitesList.innerHTML = sites
-    .map((site) => {
+    .map((site, index) => {
+      const score = formatScoreOn10(site.criticality_score_10);
+      const groundwaterLevel = formatLevelOn10(site.groundwater_score_10);
+      const withdrawalLevel = formatLevelOn10(site.withdrawal_score_10);
       const withdrawalVolume = formatWithdrawalVolume(site);
-      const secondaryMetric = withdrawalVolume
-        ? `Prélèvements : ${withdrawalVolume}`
-        : `Pression locale : ${humanPressureLevel(site.pressure_level || "Unknown")}`;
       return `
         <article class="top-site-row">
-          <div>
-            <div class="top-site-title">${escapeHtml(site.site_name)}</div>
-            <p class="top-site-company">${escapeHtml(site.company_name)}</p>
-            <div class="badge-row">
+          <div class="top-site-rank">${index + 1}</div>
+          <div class="top-site-body">
+            <div class="top-site-head">
+              <div>
+                <div class="top-site-title">${escapeHtml(site.site_name)}</div>
+                <p class="top-site-company">${escapeHtml(site.company_name)}</p>
+              </div>
+              <div class="inline-actions">
+                <button class="ghost-button" type="button" data-action="inspect-site-inline" data-site-id="${escapeHtml(site.site_id)}">Voir</button>
+              </div>
+            </div>
+            <div class="badge-row top-site-badges">
               <span class="priority-pill ${priorityClass(site.priority_level || "Low")}">${escapeHtml(translatePriority(site.priority_level || "Low"))}</span>
+              ${score ? `<span class="badge">Criticité : ${escapeHtml(score)}</span>` : ""}
               <span class="badge">Nappe : ${escapeHtml(formatTrendDelta(site.aquifer_trend_value_cm_20y))}</span>
-              <span class="badge">${escapeHtml(secondaryMetric)}</span>
+              ${groundwaterLevel ? `<span class="badge">Niveau nappe : ${escapeHtml(groundwaterLevel)}</span>` : ""}
+              ${
+                withdrawalVolume
+                  ? `<span class="badge">Prélèvements : ${escapeHtml(withdrawalVolume)}</span>`
+                  : `<span class="badge">${escapeHtml(`Pression locale : ${humanPressureLevel(site.pressure_level || "Unknown")}`)}</span>`
+              }
+              ${withdrawalLevel ? `<span class="badge">Niveau prélèvements : ${escapeHtml(withdrawalLevel)}</span>` : ""}
               <span class="badge">${escapeHtml(site.city || "Ville inconnue")}</span>
             </div>
-          </div>
-          <div class="inline-actions">
-            <button class="ghost-button" type="button" data-action="inspect-site-inline" data-site-id="${escapeHtml(site.site_id)}">Voir</button>
           </div>
         </article>
       `;
@@ -1099,6 +1130,10 @@ function renderDetail(site) {
       <span class="badge">${escapeHtml(translateConfidence(site.geoloc_confidence_label || "Unknown"))}</span>
     </div>
     <div class="detail-grid">
+      <div class="detail-item">
+        <div class="detail-item-label">Criticité</div>
+        <div class="detail-item-value">${escapeHtml(formatScoreOn10(site.criticality_score_10) || "n.d.")}</div>
+      </div>
       <div class="detail-item">
         <div class="detail-item-label">Adresse</div>
         <div class="detail-item-value">${escapeHtml(site.address_line || "Non disponible")}</div>
@@ -1154,8 +1189,20 @@ function renderDetail(site) {
           )}</div>
         </div>
         <div class="detail-item">
+          <div class="detail-item-label">Niveau nappe</div>
+          <div class="detail-item-value">${escapeHtml(formatLevelOn10(site.groundwater_score_10) || "n.d.")}</div>
+        </div>
+        <div class="detail-item">
           <div class="detail-item-label">Niveau de pression</div>
           <div class="detail-item-value">${escapeHtml(humanPressureLevel(site.pressure_level))}</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-item-label">Prélèvements sur la zone</div>
+          <div class="detail-item-value">${escapeHtml(formatWithdrawalVolume(site) || "n.d.")}</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-item-label">Niveau prélèvements</div>
+          <div class="detail-item-value">${escapeHtml(formatLevelOn10(site.withdrawal_score_10) || "n.d.")}</div>
         </div>
         <div class="detail-item">
           <div class="detail-item-label">Stations proches</div>

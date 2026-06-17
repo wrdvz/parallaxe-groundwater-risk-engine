@@ -55,7 +55,9 @@ CREATE TABLE IF NOT EXISTS site_hydro_context (
   groundwater_decline_percentile REAL,
   withdrawal_volume_percentile REAL,
   groundwater_decline_decile INTEGER,
-  withdrawal_volume_decile INTEGER
+  withdrawal_volume_decile INTEGER,
+  groundwater_level_10 INTEGER,
+  withdrawal_level_10 INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS site_risk_scores (

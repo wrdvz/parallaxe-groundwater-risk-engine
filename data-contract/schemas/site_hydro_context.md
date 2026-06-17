@@ -19,3 +19,5 @@ Hydrological context already computed upstream at site level.
 - `withdrawal_volume_percentile`
 - `groundwater_decline_decile`
 - `withdrawal_volume_decile`
+- `groundwater_level_10`
+- `withdrawal_level_10`

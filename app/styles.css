@@ -633,18 +633,44 @@ button:disabled {
 
 .top-sites-list {
   display: grid;
-  gap: 10px;
+  gap: 8px;
+  max-height: 640px;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .top-site-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 12px;
   align-items: start;
-  padding: 12px;
+  padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: #fff;
+}
+
+.top-site-rank {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #eef3fb;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.top-site-body {
+  min-width: 0;
+}
+
+.top-site-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .top-site-title {
@@ -654,9 +680,13 @@ button:disabled {
 }
 
 .top-site-company {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   color: var(--text-muted);
   font-size: 13px;
+}
+
+.top-site-badges {
+  margin-top: 0;
 }
 
 .portfolio-map-header,
